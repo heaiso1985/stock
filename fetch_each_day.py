@@ -14,15 +14,14 @@ class Fetch_each_day():
 
     def __init__(self):
         #self.baseinfo=ts.get_stock_basics()
-
         self.getDate()
+        self.path=os.path.join(os.path.dirname(__file__),'data')
 
+        self.df_today_all=pd.DataFrame()
 
     def excel_operation(self):
-        self.path=os.path.join(os.getcwd(),'data')
         if not os.path.exists(self.path):
             os.mkdir(self.path)
-
 
         self.GetAllTodayData()
         self.sortTurnOver()
@@ -42,19 +41,30 @@ class Fetch_each_day():
         #放在data文件夹下
         filename=os.path.join(self.path,filename)
         if not os.path.exists(filename):
-            self.df_today_all=ts.get_today_all()
-            #过滤停牌的
-            self.df_today_all.drop(self.df_today_all[self.df_today_all['turnoverratio']==0].index,inplace=True)
-            #实测可用，删除的方法
-            #n1=self.df_today_all[self.df_today_all['turnoverratio']==0]
-            #n2=self.df_today_all.drop(n1.index)
-            #print n2
-            print self.df_today_all
-            self.df_today_all.to_excel(filename,sheet_name='All')
+            re_try=5
+            while re_try>0:
+                try:
+                    self.df_today_all=ts.get_today_all()
+                #过滤停牌的
+                # self.df_today_all.drop(self.df_today_all[self.df_today_all['turnoverratio']==0].index,inplace=True)
+                #实测可用，删除的方法
+                #n1=self.df_today_all[self.df_today_all['turnoverratio']==0]
+                #n2=self.df_today_all.drop(n1.index)
+                #print n2
+                # print self.df_today_all
+                    break
+                except Exception,e:
+                    re_try=re_try-1
+                    time.sleep(5)
+            if len(self.df_today_all)!=0:
 
+                self.df_today_all.to_excel(filename,sheet_name='All')
+            else:
+                self.df_today_all=None
         else:
             self.df_today_all=pd.read_excel(filename,sheet_name='All')
-            print "File existed"
+            # print "File existed"
+        return self.df_today_all
 
     def sortTurnOver(self):
         top_filename=self.today+'_top_turnover.xls'
@@ -64,9 +74,10 @@ class Fetch_each_day():
             top_high=high_turnover.head(100)
 
             top_high.to_excel(topfile,sheet_name='heat100')
-
+            return top_high
         else:
-            top_high=pd.read_excel(topfile,sheetname='heat100')
+            df=pd.read_excel(topfile,sheetname='heat100')
+            return df
 
     def getHistory(self,id):
         data=ts.get_hist_data(id)
@@ -85,20 +96,19 @@ class Fetch_each_day():
             print "File existed"
 
     def save_sql(self):
-        data=Toolkit.getUserData()
-        sql_pwd=data['mysql_password']
-        self.engine=create_engine('mysql://root:%s@localhost/daily_data?charset=utf8' %sql_pwd)
+        cfg_file=os.path.join(os.path.dirname(__file__),'data.cfg')
+        data=Toolkit.getUserData(cfg_file)
+        sql_pwd=data['MYSQL_PASSWORD']
+        self.engine=create_engine('mysql+pymysql://root:%s@localhost/db_daily?charset=utf8' %sql_pwd)
 
-        self.df_today_all=ts.get_today_all()
-        self.df_today_all.to_sql(self.today,self.engine)
-
-
+        # self.df_today_all=ts.get_today_all()
+        self.df_today_all.to_sql(self.today,self.engine,if_exists='replace')
 
 
 if __name__=="__main__":
     obj=Fetch_each_day()
-    #obj.save_sql()
     #obj.getHistory('300333')
     #obj.isFileExist('candle.xls')
     #obj.my_choice('300333')
     obj.excel_operation()
+    obj.save_sql()
